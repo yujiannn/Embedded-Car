@@ -8,115 +8,89 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "pico/time.h"
+#define leftEncoderPin 1
+#define rightEncoderPin 3
 
-static char event_str[128];
 static int leftWheel_hole_count=0; //holes in left wheel disc
 static int rightWheel_hole_count=0; //holes in right wheel disc
 static float wheel_circumference = 10.0/100;
 static absolute_time_t leftWheel_last_interrupt_time;
 static absolute_time_t rightWheel_last_interrupt_time;
+static float leftSpeed = 0.0; // Speed of left wheel
+static float rightSpeed = 0.0; // Speed of right wheel
 
-static float total_distance_covered = 0;
-static float total_speed = 0;
-
-
-void gpio_event_string(char *buf, uint32_t events);
-
-void gpio_callback_left(uint gpio, uint32_t events) {
-    leftWheel_hole_count++;
-
+void gpio_callback(uint gpio, uint32_t events) {
     absolute_time_t current_time = get_absolute_time();
-    int64_t time_diff_us = absolute_time_diff_us(leftWheel_last_interrupt_time, current_time);
-    leftWheel_last_interrupt_time = current_time;
     float distance_per_pulse = wheel_circumference / 20;
-    float time_per_pulse_s = time_diff_us / 1e6;
-    float leftSpeed = distance_per_pulse / time_per_pulse_s;
+    float time_diff_us, time_per_pulse_s, distance_covered;
 
-    float distance_covered = (wheel_circumference / 20) * leftWheel_hole_count;
-    // Put the GPIO event(s) that just happened into event_str
-    // so we can print it
-    gpio_event_string(event_str, events);
-    printf("GPIO %d %s\n", gpio, event_str);
-    printf("Left Wheel - Distance covered: %f meters", distance_covered);
-    printf(" Speed: %f meters per second", leftSpeed);
+    if (gpio == leftEncoderPin) { // Left wheel encoder
+        if (gpio_get(gpio)){
+            leftWheel_hole_count++;
+        }
+        time_diff_us = absolute_time_diff_us(leftWheel_last_interrupt_time, current_time);
+        leftWheel_last_interrupt_time = current_time;
+        distance_covered = (wheel_circumference / 20) * leftWheel_hole_count;
+        printf("Left Wheel - Distance covered: %f meters ", distance_covered);
+    } else if (gpio == rightEncoderPin) { // Right wheel encoder
+        if (gpio_get(gpio)){
+            rightWheel_hole_count++;
+        }
+        time_diff_us = absolute_time_diff_us(rightWheel_last_interrupt_time, current_time);
+        rightWheel_last_interrupt_time = current_time;
+        distance_covered = (wheel_circumference / 20) * rightWheel_hole_count;
+        printf("Right Wheel - Distance covered: %f meters ", distance_covered);
+    }
 
-    // Update total distance and speed
-    total_distance_covered += distance_covered;
-    total_speed += leftSpeed;
+    time_per_pulse_s = time_diff_us / 1e6;
+    if (gpio == 1) {
+        leftSpeed = distance_per_pulse / time_per_pulse_s;
+        printf(" Left Speed: %f meters per second\n", leftSpeed);
+    } else if (gpio == 3) {
+        rightSpeed = distance_per_pulse / time_per_pulse_s;
+        printf(" Right Speed: %f meters per second\n", rightSpeed);
+    }
 }
 
-void gpio_callback_right(uint gpio, uint32_t events) {
-    rightWheel_hole_count++;
+void calculate_average() {
+    float average_distance = ((wheel_circumference / 20) * (leftWheel_hole_count + rightWheel_hole_count)) / 2;
+    float average_speed = (leftSpeed + rightSpeed) / 2;
+    printf("Average Distance: %f meters ", average_distance);
+    printf("Average Speed: %f meters per second\n", average_speed);
+} 
 
+void reset() {
     absolute_time_t current_time = get_absolute_time();
-    int64_t time_diff_us = absolute_time_diff_us(rightWheel_last_interrupt_time, current_time);
-    rightWheel_last_interrupt_time = current_time;
-    float distance_per_pulse = wheel_circumference / 20;
-    float time_per_pulse_s = time_diff_us / 1e6;
-    float rightSpeed = distance_per_pulse / time_per_pulse_s;
-    float distance_covered = (wheel_circumference / 20) * rightWheel_hole_count;
-    // Put the GPIO event(s) that just happened into event_str
-    // so we can print it
-    gpio_event_string(event_str, events);
-    printf("GPIO %d %s\n", gpio, event_str);
-    printf("Right Wheel - Distance covered: %f meters", distance_covered);
-    printf(" Speed: %f meters per second", rightSpeed);
+    int64_t time_diff_left_us = absolute_time_diff_us(leftWheel_last_interrupt_time, current_time);
+    int64_t time_diff_right_us = absolute_time_diff_us(rightWheel_last_interrupt_time, current_time);
+    //float average_distance = ((wheel_circumference / 20) * (leftWheel_hole_count + rightWheel_hole_count)) / 2;
 
-    // Update total distance and speed
-    total_distance_covered += distance_covered;
-    total_speed += rightSpeed;
+    if (time_diff_left_us > 2e6 && time_diff_right_us > 2e6) { // 2 seconds = 2e6 microseconds
+        //printf("Average Distance: %f meters\n", average_distance);
+        //printf("Average Speed before stop: %f meters per second\n", (leftSpeed + rightSpeed) / 2);
+        leftWheel_hole_count = 0;
+        rightWheel_hole_count = 0;
+        leftSpeed = 0.0;
+        rightSpeed = 0.0;
+    }
 }
 
-//average distance and speed
-void print_average() {
-    float average_distance = total_distance_covered / (leftWheel_hole_count + rightWheel_hole_count);
-    float average_speed = total_speed / (leftWheel_hole_count + rightWheel_hole_count);
-
-    printf("Average Distance covered: %f meters", average_distance);
-    printf(" Average Speed: %f meters per second", average_speed);
-}
-
-int main() {
+ void init(){
     stdio_init_all();
-   
-    gpio_set_irq_enabled_with_callback(1, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback_left);
-    gpio_set_irq_enabled_with_callback(3, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback_right);
+    gpio_pull_up(leftEncoderPin);
+    gpio_pull_up(rightEncoderPin);
+    gpio_set_irq_enabled_with_callback(leftEncoderPin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
+    gpio_set_irq_enabled_with_callback(rightEncoderPin, GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL, true, &gpio_callback);
     leftWheel_last_interrupt_time = get_absolute_time();
     rightWheel_last_interrupt_time = get_absolute_time();
+ }
 
+int main() {
+    init();
     // Wait forever
     while(1){
-        print_average();
+        calculate_average();
+        reset();
         sleep_ms(1000);
     }
-    
-}
-
-
-static const char *gpio_irq_str[] = {
-        "LEVEL_LOW",  // 0x1
-        "LEVEL_HIGH", // 0x2
-        "EDGE_FALL",  // 0x4
-        "EDGE_RISE"   // 0x8
-};
-
-void gpio_event_string(char *buf, uint32_t events) {
-    for (uint i = 0; i < 4; i++) {
-        uint mask = (1 << i);
-        if (events & mask) {
-            // Copy this event string into the user string
-            const char *event_str = gpio_irq_str[i];
-            while (*event_str != '\0') {
-                *buf++ = *event_str++;
-            }
-            events &= ~mask;
-
-            // If more events add ", "
-            if (events) {
-                *buf++ = ',';
-                *buf++ = ' ';
-            }
-        }
-    }
-    *buf++ = '\0';
 }

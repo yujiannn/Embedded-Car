@@ -3,21 +3,26 @@
 
 #define MAGNETOMETER_ADDR 0x1E
 #define MR_REG_M 0x02
+#define sdaPin 4
+#define sclPin 5
 
-int main() {
+void i2c_init_config() {
     stdio_init_all();
     i2c_init(i2c0, 100 * 1000);
-    gpio_set_function(4, GPIO_FUNC_I2C);
-    gpio_set_function(5, GPIO_FUNC_I2C);
-    gpio_pull_up(4);
-    gpio_pull_up(5);
+    gpio_set_function(sdaPin, GPIO_FUNC_I2C);
+    gpio_set_function(sclPin, GPIO_FUNC_I2C);
+    gpio_pull_up(sdaPin);
+    gpio_pull_up(sclPin);
+}
 
-    uint8_t buffer[6];
+void write_to_register() {
     uint8_t register_value[] = {MR_REG_M, 0x00}; // Continuous conversion mode
-
     // Write to MR_REG_M to set continuous conversion mode
     i2c_write_blocking(i2c0, MAGNETOMETER_ADDR, register_value, 2, false);
+}
 
+void read_and_print_data() {
+    uint8_t buffer[6];
     while (1) {
         // Read from OUT_X_H_M register (0x03)
         buffer[0] = 0x03;
@@ -32,6 +37,12 @@ int main() {
 
         sleep_ms(1000);
     }
+}
+
+int main() {
+    i2c_init_config();
+    write_to_register();
+    read_and_print_data();
 
     return 0;
 }
