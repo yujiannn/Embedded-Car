@@ -1,132 +1,65 @@
-// #include <stdio.h>
-// #include "pico/stdlib.h"
-// #include "hardware/gpio.h"
-// #include "hardware/timer.h"
-
-// int timeout = 26100;
-
-// void setupUltrasonicPins(uint trigPin, uint echoPin) {
-//     gpio_init(trigPin);
-//     gpio_init(echoPin);
-//     gpio_set_dir(trigPin, GPIO_OUT);
-//     gpio_set_dir(echoPin, GPIO_IN);
-// }
-
-// uint64_t getPulse(uint trigPin, uint echoPin) {
-//     gpio_put(trigPin, 1);
-//     sleep_us(10);
-//     gpio_put(trigPin, 0);
-
-//     uint64_t width = 0;
-//     absolute_time_t startTime = get_absolute_time();
-
-//     while (gpio_get(echoPin) == 0) {
-//         tight_loop_contents();
-//     }
-//     while (gpio_get(echoPin) == 1) {
-//         width++;
-//         sleep_us(1);
-//         if (width > timeout) return 0;
-//     }
-//     absolute_time_t endTime = get_absolute_time();
-
-//     return absolute_time_diff_us(startTime, endTime);
-// }
-
-// uint64_t getCm(uint trigPin, uint echoPin) {
-//     uint64_t pulseLength = getPulse(trigPin, echoPin);
-//     return pulseLength * 0.0343 / 2;  // Speed of sound in air is approximately 343 m/s
-// }
-
-
-// uint64_t getInch(uint trigPin, uint echoPin) {
-//     uint64_t pulseLength = getPulse(trigPin, echoPin);
-//     return pulseLength * 0.00675;  // Speed of sound in air is approximately 13503.9 inches per second
-// }
-
-// int main() {
-//     stdio_init_all();
-//     uint trigPin = 0; // Replace with your TRIG pin number
-//     uint echoPin = 1; // Replace with your ECHO pin number
-
-//     setupUltrasonicPins(trigPin, echoPin);
-//     printf("Ultrasonic Sensor Readings\n");
-
-//     while (1) {
-        
-//         uint64_t distance_inch = getInch(trigPin, echoPin);
-//         uint64_t distance_cm = getCm(trigPin, echoPin);
-
-//         // printf("Distance: %lu cm / %lu inches\n", distance_cm, distance_inch);
-//         printf("Distance: %llu cm / %llu inches\n", distance_cm, distance_inch);
-
-        
-//         sleep_ms(1000);  // Delay between measurements
-//     }
-
-//     return 0;
-// }
-
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/timer.h"
 
+// Define a timeout value for the ultrasonic sensor
 int timeout = 26100;
 
+// Function to set up the Ultrasonic sensor pins
 void setupUltrasonicPins(uint trigPin, uint echoPin) {
     gpio_init(trigPin);
     gpio_init(echoPin);
-    gpio_set_dir(trigPin, GPIO_OUT);
-    gpio_set_dir(echoPin, GPIO_IN);
+    gpio_set_dir(trigPin, GPIO_OUT);  // Set TRIG pin as an output
+    gpio_set_dir(echoPin, GPIO_IN);   // Set ECHO pin as an input
 }
 
+// Variables to hold the start and end times of the ultrasonic pulse
 volatile uint64_t pulse_start_time = 0;
 volatile uint64_t pulse_end_time = 0;
 
+// Interrupt service routine for the ECHO pin
 void echo_pin_isr(uint gpio, uint32_t events) {
     if (gpio_get(gpio)) {
         // Rising edge
-        pulse_start_time = time_us_64();
+        pulse_start_time = time_us_64();  // Record the time of the rising edge
     } else {
         // Falling edge
-        pulse_end_time = time_us_64();
+        pulse_end_time = time_us_64();  // Record the time of the falling edge
     }
 }
 
+// Function to get the duration of the ultrasonic pulse
 uint64_t getPulse(uint trigPin, uint echoPin) {
     pulse_start_time = 0;
     pulse_end_time = 0;
 
-    gpio_put(trigPin, 1);
-    sleep_us(10);
-    gpio_put(trigPin, 0);
+    gpio_put(trigPin, 1);   // Send a high signal to the TRIG pin
+    sleep_us(10);           // Wait for a short time
+    gpio_put(trigPin, 0);   // Turn off the TRIG pin
 
-    // Wait for falling edge interrupt
+    // Wait for the falling edge interrupt
     while (pulse_end_time == 0) {
         tight_loop_contents();
     }
 
-    // Calculate pulse duration
+    // Calculate the pulse duration
     uint64_t pulse_duration = pulse_end_time - pulse_start_time;
 
     return pulse_duration;
 }
 
-uint64_t getCm(uint trigPin, uint echoPin) {
+// Function to convert pulse duration to distance in centimeters
+double getCm(uint trigPin, uint echoPin) {
     uint64_t pulseLength = getPulse(trigPin, echoPin);
-    return pulseLength * 0.0343 / 2;  // Speed of sound in air is approximately 343 m/s
+    double distance_cm = (double)(pulseLength * 0.0343 / 2);  // Speed of sound in air is approximately 343 m/s
+    return distance_cm;
 }
-
-// uint64_t getInch(uint trigPin, uint echoPin) {
-//     uint64_t pulseLength = getPulse(trigPin, echoPin);
-//     return pulseLength * 0.0135 / 2;  // Speed of sound in air is approximately 13503.9 inches per second
-// }
 
 int main() {
     stdio_init_all();
-    uint trigPin = 0; // Replace with your TRIG pin number
-    uint echoPin = 1; // Replace with your ECHO pin number
+    uint trigPin = 0;
+    uint echoPin = 1;
 
     setupUltrasonicPins(trigPin, echoPin);
 
@@ -136,15 +69,10 @@ int main() {
     printf("Ultrasonic Sensor Readings\n");
 
     while (1) {
-        // uint64_t distance_inch = getInch(trigPin, echoPin);
-        uint64_t distance_cm = getCm(trigPin, echoPin);
-
-        // printf("Distance: %llu cm / %llu inches\n", distance_cm, distance_inch);
-        printf("Distance: %llu cm \n", distance_cm);
-
+        double distance_cm = getCm(trigPin, echoPin);
+        printf("Distance: %.2f cm\n", distance_cm);  // Format the output to two decimal places
         sleep_ms(1000);  // Delay between measurements
     }
 
     return 0;
 }
-
