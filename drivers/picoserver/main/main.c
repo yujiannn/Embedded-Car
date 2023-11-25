@@ -16,6 +16,7 @@
 #define MAX_WHITE_BARS 14
 #define MAX_BLACK_BARS 15
 #define MAX_ENCODED_VALUES 11
+#define MAX_ENCODED_STARTING_VALUES 3
 
 // Barcode struct
 //
@@ -45,6 +46,8 @@ int blackIndex = 0;
 int encodedString[MAX_ENCODED_VALUES];
 BarInfo barList[MAX_WHITE_BARS + MAX_BLACK_BARS];
 
+bool read = false;
+
 uint64_t whiteBarTime[MAX_WHITE_BARS];
 uint64_t blackBarTime[MAX_BLACK_BARS];
 uint64_t averageBlackBarLength = 0;
@@ -52,11 +55,19 @@ uint64_t averageWhiteBarLength = 0;
 uint64_t startIntervalTime = 0;
 uint64_t interval = 0;
 
+char decodedLetter;
+
+int correctDirectionPattern[MAX_ENCODED_STARTING_VALUES] = {1, 2, 1};
+int oppositeDirectionPattern[MAX_ENCODED_STARTING_VALUES] = {0, 2, 0};
+int encodedDigits[MAX_ENCODED_VALUES];
+int encodedStartingDigits[MAX_ENCODED_STARTING_VALUES];
+int direction;
+
 
 // WIFI Credentials - take care if pushing to github!
 //
-const char WIFI_SSID[] = "Galaxy eee";
-const char WIFI_PASSWORD[] = "kuiv4369";
+const char WIFI_SSID[] = "iPhone";
+const char WIFI_PASSWORD[] = "12345679";
 
 // Match data to letter
 // 
@@ -72,6 +83,7 @@ arrayMapDictionary[] =
     {'G', {3, 1, 3, 1, 3, 1, 2, 0, 3, 0, 3}},
     {'H', {3, 0, 3, 1, 3, 1, 2, 0, 3, 1, 3}},
     {'I', {3, 1, 3, 0, 3, 1, 2, 0, 3, 1, 3}},
+    //{'I', {3, 1, 3, 0, 2, 1, 3, 0, 3, 1, 3}},
     {'J', {3, 1, 3, 1, 3, 0, 2, 0, 3, 1, 3}},
     {'K', {3, 0, 3, 1, 3, 1, 3, 1, 2, 0, 3}},
     {'L', {3, 1, 3, 0, 3, 1, 3, 1, 2, 0, 3}},
@@ -91,9 +103,53 @@ arrayMapDictionary[] =
     {'Z', {3, 1, 2, 0, 3, 0, 3, 1, 3, 1, 3}}
 };
 
+ArrayMapEntry 
+arrayMapDictionary1[] = 
+{
+{'A', {3, 0, 3, 1, 2, 1, 3, 0, 3, 1, 3}},
+{'B', {3, 0, 3, 1, 2, 1, 3, 0, 3, 1, 3}},
+{'C', {3, 1, 3, 1, 2, 1, 3, 0, 3, 0, 3}},
+{'D', {3, 0, 3, 1, 2, 1, 3, 0, 3, 1, 3}},
+{'E', {3, 1, 3, 1, 2, 1, 3, 0, 3, 1, 3}},
+{'F', {3, 1, 3, 1, 2, 0, 3, 0, 3, 1, 3}},
+{'G', {3, 0, 3, 0, 2, 0, 3, 1, 3, 1, 3}},
+{'H', {3, 1, 3, 0, 2, 0, 3, 1, 3, 1, 3}},
+{'I', {3, 1, 3, 0, 2, 0, 3, 1, 3, 1, 3}},
+{'J', {3, 0, 3, 1, 2, 0, 3, 1, 3, 1, 3}},
+{'K', {3, 0, 2, 0, 3, 1, 3, 1, 3, 1, 3}},
+{'L', {3, 0, 2, 0, 3, 1, 3, 1, 3, 1, 3}},
+{'M', {3, 1, 2, 1, 3, 1, 2, 0, 3, 0, 3}},
+{'N', {3, 0, 2, 0, 3, 1, 3, 1, 3, 1, 3}},
+{'O', {3, 1, 2, 1, 3, 0, 2, 1, 3, 0, 3}},
+{'P', {3, 1, 2, 1, 3, 0, 2, 1, 3, 0, 3}},
+{'Q', {3, 0, 2, 0, 3, 1, 3, 1, 3, 1, 3}},
+{'R', {3, 1, 2, 1, 3, 0, 2, 0, 3, 1, 3}},
+{'S', {3, 1, 2, 1, 3, 0, 2, 0, 3, 1, 3}},
+{'T', {3, 0, 2, 1, 3, 0, 3, 1, 3, 1, 3}},
+{'U', {3, 0, 3, 1, 3, 1, 2, 1, 3, 0, 3}},
+{'V', {3, 0, 3, 1, 3, 1, 2, 0, 3, 1, 3}},
+{'W', {3, 1, 3, 1, 3, 1, 2, 0, 3, 0, 3}},
+{'X', {3, 0, 3, 1, 3, 0, 2, 1, 3, 1, 3}},
+{'Y', {3, 1, 3, 1, 3, 0, 2, 1, 3, 0, 3}},
+{'Z', {3, 1, 3, 0, 3, 0, 2, 0, 3, 1, 3}}
+
+};
+
+bool compareArrays(int array1[], int array2[], int size)
+{
+    for (int i = 0; i < size; i++)
+    {
+        if (array1[i] != array2[i])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 char 
 decode_bar_info(int encodedString[MAX_ENCODED_VALUES])
-{
+{ 
     // Compare encoded string with arrayMapDictionary
     for (int i = 0; i < sizeof(arrayMapDictionary) / sizeof(arrayMapDictionary[0]); i++)
     {
@@ -107,8 +163,32 @@ decode_bar_info(int encodedString[MAX_ENCODED_VALUES])
             }
         }
         if (matched)
-        {
+        {   
             return arrayMapDictionary[i].letter;
+        }
+    }
+    // No match found
+    return '\0';
+}
+
+char 
+decode_bar_info1(int encodedString[MAX_ENCODED_VALUES])
+{ 
+    // Compare encoded string with arrayMapDictionary
+    for (int i = 0; i < sizeof(arrayMapDictionary1) / sizeof(arrayMapDictionary1[0]); i++)
+    {
+        int matched = 1;
+        for (int j = 0; j < MAX_ENCODED_VALUES; j++)
+        {
+            if (arrayMapDictionary1[i].arrayMap[j] != encodedString[j])
+            {
+                matched = 0;
+                break;
+            }
+        }
+        if (matched)
+        {   
+            return arrayMapDictionary1[i].letter;
         }
     }
     // No match found
@@ -118,7 +198,10 @@ decode_bar_info(int encodedString[MAX_ENCODED_VALUES])
 void
 display_barcode_data()
 {
-    char decodedLetter = decode_bar_info(encodedString);
+    if (direction==1){
+        decodedLetter=decode_bar_info(encodedString);
+    }else
+    decodedLetter=decode_bar_info1(encodedString);
 
     if (decodedLetter != '\0')
     {
@@ -129,6 +212,7 @@ display_barcode_data()
         printf("No letter matched the encoded string.\n");
     }
 }
+
 
 void
 store_barcode_data()
@@ -176,6 +260,41 @@ store_barcode_data()
         printf("%d", encodedString[i]);
     }
     printf("\n");
+
+     printf("\nStarting digits: ");
+    
+    for (int i = 0; i < MAX_ENCODED_VALUES; i++)
+    {   
+        encodedDigits[i]=barList[i+9].category; 
+    }
+
+    for (int i = 0; i < MAX_ENCODED_STARTING_VALUES; i++)
+    {   
+        encodedStartingDigits[i]=barList[i].category; 
+    }
+
+
+    for (int i = 0; i < MAX_ENCODED_STARTING_VALUES; i++)
+    {
+        //printf("%d", encodedStartingDigits[i]);
+    }
+    printf("\n");
+    
+
+    if (compareArrays(encodedStartingDigits, correctDirectionPattern, MAX_ENCODED_STARTING_VALUES))
+    {
+        printf("Barcode is in the correct direction.\n");
+        direction = 1;
+    }
+    else if (compareArrays(encodedStartingDigits, oppositeDirectionPattern, MAX_ENCODED_STARTING_VALUES))
+    {
+        printf("Barcode is in the opposite direction.\n");
+        direction = 0;
+    }
+    else
+    {
+        printf("Unable to detect direction.\n");
+    }
 }
 
 void
@@ -194,7 +313,7 @@ calculate_black_bar()
     //printf("Black Bar Intervals:\n");
     for (int i = 0; i < MAX_BLACK_BARS; i++)
     {
-        uint64_t barTime = blackBarTime[i];
+       // uint64_t barTime = blackBarTime[i];
         // int category = (barTime > averageBlackBarLength) ? 2 : 1;
         //printf("Black Bar %d: %llu milliseconds\n", i + 1, barTime);
     }
@@ -216,13 +335,13 @@ calculate_white_bar()
     //printf("White Bar Intervals:\n");
     for (int i = 0; i <= MAX_WHITE_BARS; i++)
     {
-        uint64_t barTime = whiteBarTime[i];
+        //uint64_t barTime = whiteBarTime[i];
         // int category = (barTime > averageWhiteBarLength) ? 2 : 1;
         //printf("White Bar %d: %llu milliseconds\n", i + 1, barTime);
     }
 }
 
-int
+void
 read_bar_data()
 {
     int currentState = gpio_get(BARCODE_READER_PIN);
@@ -268,7 +387,12 @@ read_bar_data()
         calculate_black_bar();
         store_barcode_data();
         display_barcode_data();
-        return 0;
+
+        // Call to update the interface
+        //
+        set_decoded_result(decodedLetter);
+
+        read = true;
     }
     previousState = currentState;
 }
@@ -322,12 +446,13 @@ main()
     
     sleep_ms(2000);
     printf("ready to read barcode\n");
-    
 
     // Infinite loop
     while(1)
     {
-        
-        read_bar_data();
+        if (read == false)
+        {
+            read_bar_data();
+        }
     };
 }
