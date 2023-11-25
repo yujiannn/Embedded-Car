@@ -1,7 +1,9 @@
-#include <stdio.h>
 #include "pico/stdlib.h"
-#include "hardware/gpio.h"
-#include "hardware/timer.h"
+#include "ultrasonic_sensor.h"
+
+// Define the trigger and echo pins
+#define TRIG_PIN 6
+#define ECHO_PIN 7
 
 // Define a timeout value for the ultrasonic sensor
 int timeout = 26100;
@@ -56,11 +58,7 @@ double getCm(uint trigPin, uint echoPin) {
     return distance_cm;
 }
 
-int main() {
-    stdio_init_all();
-    uint trigPin = 0;
-    uint echoPin = 1;
-
+void ultrasonicSensorRead(uint trigPin, uint echoPin) {
     setupUltrasonicPins(trigPin, echoPin);
 
     // Configure the ECHO pin for interrupts on both rising and falling edges
@@ -68,11 +66,8 @@ int main() {
 
     printf("Ultrasonic Sensor Readings\n");
 
-    while (1) {
-        double distance_cm = getCm(trigPin, echoPin);
-        printf("Distance: %.2f cm\n", distance_cm);  // Format the output to two decimal places
-        sleep_ms(1000);  // Delay between measurements
-    }
-
-    return 0;
+    // Replace the 'while(1)' with a single measurement for modularity
+    double distance_cm = getCm(trigPin, echoPin);
+    printf("Distance: %.2f cm\n", distance_cm);  // Format the output to two decimal places
+    // Removed the sleep_ms(1000) to allow external control over read frequency
 }

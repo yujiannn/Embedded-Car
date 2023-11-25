@@ -1,7 +1,0 @@
-
-add_subdirectory(encoder)
-add_subdirectory(ir_leftandright)
-add_subdirectory(magnometer)
-add_subdirectory(motor)
-add_subdirectory(ultrasonic)
-add_subdirectory(integrate)
