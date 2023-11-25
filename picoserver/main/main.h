@@ -1,4 +1,14 @@
-#include "main.h"
+#include <stdio.h>
+#include "pico/stdlib.h"
+#include "hardware/gpio.h"
+#include "pico/time.h"
+#include <string.h>
+
+#include "lwip/apps/httpd.h"
+#include "pico/cyw43_arch.h"
+#include "lwipopts.h"
+#include "ssi.h"
+#include "cgi.h"
 
 // Variables
 //
@@ -422,4 +432,27 @@ intitialize_wifi()
     printf("CGI Handler initialised\n");
 
     read_bar_data();
+}
+
+int 
+main() 
+{
+    stdio_init_all();
+
+    intitialize_wifi();
+
+    // change delay accordingly
+    initialize_barcode_reader();
+    
+    sleep_ms(2000);
+    printf("ready to read barcode\n");
+
+    // Infinite loop
+    while(1)
+    {
+        if (read == false)
+        {
+            read_bar_data();
+        }
+    };
 }
